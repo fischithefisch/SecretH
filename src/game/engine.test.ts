@@ -398,3 +398,31 @@ describe("randomized games", () => {
     expect(finished).toBe(200);
   }, 60_000);
 });
+
+describe("bots", () => {
+  it("can play complete games on their own", async () => {
+    const { botAction } = await import("./bots");
+    for (let seed = 1; seed <= 100; seed++) {
+      const rng = seededRng(seed);
+      const n = 5 + (seed % 6);
+      let s = createGame();
+      for (const id of ids(n)) s = act(s, { type: "join", playerId: id, name: id, bot: true }, rng);
+      s = act(s, { type: "start", by: "p0" }, rng);
+      for (let step = 0; step < 500 && s.phase.kind !== "gameOver"; step++) {
+        const a = botAction(s, rng);
+        expect(a).not.toBeNull();
+        s = act(s, a!, rng);
+      }
+      expect(s.phase.kind).toBe("gameOver");
+    }
+  });
+
+  it("wait for humans", async () => {
+    const { botAction } = await import("./bots");
+    let s = started(5, { roles: LIB5 });
+    s.players[1].bot = true;
+    expect(botAction(s, seededRng(1))).toBeNull(); // p0 (human) must nominate
+    s = act(s, { type: "nominate", by: "p0", targetId: "p2" });
+    expect(botAction(s, seededRng(1))).toMatchObject({ type: "vote", by: "p1" });
+  });
+});

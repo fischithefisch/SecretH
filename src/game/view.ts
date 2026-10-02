@@ -10,6 +10,7 @@ export interface PlayerView {
   players: {
     id: string;
     name: string;
+    bot: boolean;
     alive: boolean;
     connected: boolean;
     isHost: boolean;
@@ -125,8 +126,9 @@ export function viewFor(s: GameState, viewerId: string | null, connectedIds: Rea
     players: s.players.map((p) => ({
       id: p.id,
       name: p.name,
+      bot: p.bot,
       alive: p.alive,
-      connected: connectedIds.has(p.id),
+      connected: p.bot || connectedIds.has(p.id),
       isHost: p.id === s.hostId,
       investigated: p.investigated,
       confirmedNotHitler: p.confirmedNotHitler,

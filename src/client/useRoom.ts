@@ -33,6 +33,7 @@ export interface RoomState {
   error: { message: string; at: number } | null;
   join: (name: string) => void;
   act: (action: ClientAction) => void;
+  addBots: () => void;
   forgetSeat: () => void;
 }
 
@@ -148,9 +149,11 @@ export function useRoom(room: string): RoomState {
 
   const act = useCallback((action: ClientAction) => sendRaw({ t: "action", action }), [sendRaw]);
 
+  const addBots = useCallback(() => sendRaw({ t: "addBots" }), [sendRaw]);
+
   const forgetSeat = useCallback(() => storageSet(tokenKey(room), null), [room]);
 
-  return { status, view, needName, error, join, act, forgetSeat };
+  return { status, view, needName, error, join, act, addBots, forgetSeat };
 }
 
 /** Keeps the screen on during a game (iOS 16.4+, home-screen apps since 18.4). */

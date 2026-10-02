@@ -1,6 +1,8 @@
 import { routePartykitRequest, Server, type Connection } from "partyserver";
+import { BOT_NAMES, botAction } from "../game/bots";
 import { applyAction, createGame } from "../game/engine";
 import { clientMessageSchema, type ServerMessage } from "../game/protocol";
+import { MAX_PLAYERS, MIN_PLAYERS } from "../game/rules";
 import type { GameState, Rng } from "../game/types";
 import { viewFor } from "../game/view";
 
@@ -20,6 +22,8 @@ interface Stored {
 
 /** Rooms with nobody connected are deleted after this long. */
 const ROOM_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+/** Pause before a bot acts, so humans can follow what happens. */
+const BOT_DELAY_MS = 1200;
 const ROOM_CODE = /^[A-Z0-9]{4,8}$/;
 
 const secureRng: Rng = () => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32;
@@ -33,10 +37,28 @@ export class GameRoom extends Server<Env> {
   static options = { hibernate: true };
 
   private data: Stored = { game: createGame(), tokens: {} };
+  private botTimer: ReturnType<typeof setTimeout> | null = null;
 
   async onStart() {
     const stored = await this.ctx.storage.get<Stored>("data");
     if (stored) this.data = stored;
+    this.scheduleBots();
+  }
+
+  /** Lets bots make their next move after a short pause. */
+  private scheduleBots() {
+    if (this.botTimer || !botAction(this.data.game, secureRng)) return;
+    this.botTimer = setTimeout(() => {
+      this.botTimer = null;
+      const action = botAction(this.data.game, secureRng);
+      if (!action) return;
+      const result = applyAction(this.data.game, action, secureRng);
+      if (!result.ok) return; // should not happen; bots only pick legal moves
+      this.data = { ...this.data, game: result.state };
+      void this.save();
+      this.broadcastState();
+      this.scheduleBots();
+    }, BOT_DELAY_MS);
   }
 
   private async save() {
@@ -93,6 +115,26 @@ export class GameRoom extends Server<Env> {
 
     if (msg.t === "ping") return this.send(conn, { t: "pong" });
 
+    if (msg.t === "addBots") {
+      const game = this.data.game;
+      if (this.playerIdOf(conn) !== game.hostId || game.phase.kind !== "lobby") {
+        return this.send(conn, { t: "error", message: "Nur der Host kann in der Lobby Bots hinzufügen." });
+      }
+      // Fill up to the minimum, or add one more if the room is already playable.
+      const target = Math.min(MAX_PLAYERS, Math.max(MIN_PLAYERS, game.players.length + 1));
+      let next = game;
+      for (const botName of BOT_NAMES) {
+        if (next.players.length >= target) break;
+        const name = `${botName} (Bot)`;
+        if (next.players.some((p) => p.name === name)) continue;
+        const result = applyAction(next, { type: "join", playerId: randomHex(8), name, bot: true }, secureRng);
+        if (result.ok) next = result.state;
+      }
+      this.data = { ...this.data, game: next };
+      await this.save();
+      return this.broadcastState();
+    }
+
     if (msg.t === "hello") {
       const known = msg.token ? this.data.tokens[msg.token] : undefined;
       if (known && this.data.game.players.some((p) => p.id === known)) {
@@ -126,6 +168,7 @@ export class GameRoom extends Server<Env> {
     this.data = { game: result.state, tokens };
     await this.save();
     this.broadcastState();
+    this.scheduleBots();
   }
 }
 

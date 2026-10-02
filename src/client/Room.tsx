@@ -173,6 +173,11 @@ function Lobby({ view, room, code }: { view: PlayerView; room: RoomState; code: 
               Spiel starten
             </button>
             {n < MIN_PLAYERS && <p className="muted center">Noch {MIN_PLAYERS - n} Spieler nötig.</p>}
+            {n < MAX_PLAYERS && (
+              <button className="btn big" onClick={room.addBots}>
+                {n < MIN_PLAYERS ? "Mit Bots auffüllen (Testmodus)" : "Einen Bot hinzufügen"}
+              </button>
+            )}
           </>
         ) : (
           <p className="muted center">Warte, bis der Host das Spiel startet …</p>

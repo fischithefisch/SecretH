@@ -33,6 +33,8 @@ export const clientMessageSchema = z.discriminatedUnion("t", [
   }),
   z.object({ t: z.literal("action"), action: clientActionSchema }),
   z.object({ t: z.literal("ping") }),
+  /** Host only, lobby only: fill the room with server-controlled test players. */
+  z.object({ t: z.literal("addBots") }),
 ]);
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 

@@ -25,6 +25,8 @@ export interface GameConfig {
 export interface PlayerState {
   id: string;
   name: string;
+  /** Test player controlled by the server. */
+  bot: boolean;
   alive: boolean;
   role: Role | null;
   /** Has confirmed seeing their role card at game start. */
@@ -92,7 +94,7 @@ export interface GameState {
 }
 
 export type Action =
-  | { type: "join"; playerId: string; name: string }
+  | { type: "join"; playerId: string; name: string; bot?: boolean }
   | { type: "leave"; by: string }
   | { type: "kick"; by: string; targetId: string }
   | { type: "start"; by: string }

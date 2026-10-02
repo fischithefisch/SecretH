@@ -221,6 +221,7 @@ function handle(s: GameState, a: Action, rng: Rng) {
       s.players.push({
         id: a.playerId,
         name: trimmed,
+        bot: a.bot ?? false,
         alive: true,
         role: null,
         seenRole: false,
