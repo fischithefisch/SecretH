@@ -33,3 +33,22 @@ export const ROLE_LABEL: Record<Role, string> = {
   fascist: "Faschist",
   hitler: "Hitler",
 };
+
+const PORTRAITS = 20;
+
+/**
+ * Gives every player a different portrait. Deterministic, so all phones show
+ * the same picture for the same person.
+ */
+export function portraitMap(playerIds: string[]): Record<string, string> {
+  const hash = (s: string) => [...s].reduce((h, c) => (h * 33 + c.charCodeAt(0)) >>> 0, 5381);
+  const used = new Set<number>();
+  const out: Record<string, string> = {};
+  for (const id of [...playerIds].sort()) {
+    let n = hash(id) % PORTRAITS;
+    while (used.has(n)) n = (n + 1) % PORTRAITS;
+    used.add(n);
+    out[id] = a(`portrait-${n + 1}`);
+  }
+  return out;
+}

@@ -2,12 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { renderSVG } from "uqr";
 import { MAX_NAME_LENGTH, MAX_PLAYERS, MIN_PLAYERS } from "../game/rules";
 import type { PlayerView } from "../game/view";
-import { ActionPanel, describeStatus } from "./Actions";
-import { Board } from "./Board";
-import { GameOver } from "./GameOver";
+import { GameTable } from "./GameTable";
 import { navigate } from "./nav";
-import { Events } from "./Events";
-import { RoleButton } from "./RoleReveal";
 import { SeatNotices, SeatPicker } from "./Seats";
 import { NAME_KEY, storageGet, useRoom, useWakeLock, type RoomState } from "./useRoom";
 
@@ -24,24 +20,17 @@ export function Room({ code }: { code: string }) {
     content = <p className="center muted">Verbinde …</p>;
   } else if (view.phase.kind === "lobby") {
     content = <Lobby view={view} room={room} code={code} />;
-  } else if (view.phase.kind === "gameOver") {
-    content = (
-      <>
-        <SeatNotices view={view} room={room} />
-        <GameOver view={view} room={room} />
-      </>
-    );
   } else {
     content = (
       <>
         <SeatNotices view={view} room={room} />
-        <Game view={view} room={room} />
+        <GameTable view={view} room={room} />
       </>
     );
   }
 
   return (
-    <div className="screen room">
+    <div className={`screen room ${inGame ? "in-game" : ""}`}>
       <header className="topbar">
         <button className="btn link" onClick={() => navigate("/")} aria-label="Zur Startseite">
           ←
@@ -193,83 +182,5 @@ function Lobby({ view, room, code }: { view: PlayerView; room: RoomState; code: 
         </button>
       </section>
     </div>
-  );
-}
-
-function Game({ view, room }: { view: PlayerView; room: RoomState }) {
-  const status = describeStatus(view);
-  useEffect(() => {
-    document.title = status.mine ? "● Du bist dran – Secret Hitler" : "Secret Hitler";
-  }, [status.mine]);
-
-  return (
-    <div className="game">
-      <div className={`status ${status.mine ? "mine" : ""}`} role="status">
-        {status.text}
-      </div>
-      <ActionPanel view={view} room={room} />
-      <Board view={view} />
-      <PlayerList view={view} />
-      <Log view={view} />
-      <RoleButton view={view} />
-      <Events view={view} />
-    </div>
-  );
-}
-
-function PlayerList({ view }: { view: PlayerView }) {
-  return (
-    <section className="panel">
-      <h2>Spieler</h2>
-      <ul className="players">
-        {view.players.map((p) => {
-          const voting = view.phase.kind === "vote";
-          const tags: string[] = [];
-          if (p.id === view.presidentId) tags.push("Präsident");
-          if (p.id === view.chancellorId) tags.push(voting ? "Kanzler?" : "Kanzler");
-          return (
-            <li key={p.id} className={`${p.alive ? "" : "dead"} ${p.connected ? "" : "offline"}`}>
-              <span className="pname">
-                {p.name}
-                {p.id === view.you?.id && " (du)"}
-              </span>
-              <span className="ptags">
-                {tags.map((t) => (
-                  <span key={t} className={`badge ${t === "Präsident" ? "pres" : "chan"}`}>
-                    {t}
-                  </span>
-                ))}
-                {!p.alive && <span className="badge dead">tot</span>}
-                {p.confirmedNotHitler && <span className="badge">kein Hitler</span>}
-                {p.investigated && <span className="badge dim">untersucht</span>}
-                {view.phase.kind === "vote" && p.alive && (
-                  <span className={`badge ${p.hasVoted ? "ok" : "dim"}`}>{p.hasVoted ? "✓ gewählt" : "…"}</span>
-                )}
-                {!p.connected && <span className="badge dim">offline</span>}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
-function Log({ view }: { view: PlayerView }) {
-  const [open, setOpen] = useState(false);
-  const entries = [...view.log].reverse();
-  return (
-    <section className="panel log">
-      <button className="btn link" onClick={() => setOpen((o) => !o)}>
-        {open ? "Spielverlauf ausblenden" : "Spielverlauf anzeigen"}
-      </button>
-      {open && (
-        <ol>
-          {entries.map((e, i) => (
-            <li key={`${e.seq}-${i}`}>{e.text}</li>
-          ))}
-        </ol>
-      )}
-    </section>
   );
 }

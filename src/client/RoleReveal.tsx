@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
 import type { PlayerView } from "../game/view";
 import { ROLE_LABEL, roleImg } from "./assets";
+import { CardBack } from "./FlipCard";
 import { HoldToShow } from "./Hold";
 
 /** Your role, your team (if you know it) and what you learned by investigating. */
-function RoleInfo({ view }: { view: PlayerView }) {
+export function RoleInfo({ view, withCard = true }: { view: PlayerView; withCard?: boolean }) {
   const me = view.you!;
   const role = me.role!;
   const nameOf = (id: string) => view.players.find((p) => p.id === id)?.name ?? "?";
@@ -15,7 +15,7 @@ function RoleInfo({ view }: { view: PlayerView }) {
 
   return (
     <div className="role-info">
-      <img className="role-card" src={roleImg(role, me.id)} alt={`Deine Rolle: ${ROLE_LABEL[role]}`} />
+      {withCard && <img className="role-card" src={roleImg(role, me.id)} alt={`Deine Rolle: ${ROLE_LABEL[role]}`} />}
       <p className="role-name">Du bist {ROLE_LABEL[role]}</p>
       {role === "liberal" && <p>Finde und stoppe Hitler. Die Liberalen gewinnen mit 5 liberalen Gesetzen.</p>}
       {role === "fascist" && (
@@ -56,44 +56,12 @@ function RoleInfo({ view }: { view: PlayerView }) {
 
 /** Used during the role reveal phase. */
 export function RoleCardHold({ view }: { view: PlayerView }) {
+  const me = view.you!;
   return (
     <HoldToShow
-      hidden={<div className="role-back">Deine geheime Rolle</div>}
-      shown={<RoleInfo view={view} />}
+      hidden={<CardBack label="Geheime Rolle" />}
+      shown={<img src={roleImg(me.role!, me.id)} alt={`Deine Rolle: ${ROLE_LABEL[me.role!]}`} />}
+      caption={<RoleInfo view={view} withCard={false} />}
     />
-  );
-}
-
-/** Always-available button at the bottom: hold to peek at your role again. */
-export function RoleButton({ view }: { view: PlayerView }) {
-  const [held, setHeld] = useState(false);
-  useEffect(() => {
-    const hide = () => setHeld(false);
-    document.addEventListener("visibilitychange", hide);
-    window.addEventListener("blur", hide);
-    return () => {
-      document.removeEventListener("visibilitychange", hide);
-      window.removeEventListener("blur", hide);
-    };
-  }, []);
-  if (view.phase.kind === "roleReveal") return null;
-  return (
-    <>
-      {held && (
-        <div className="overlay role-overlay">
-          <RoleInfo view={view} />
-        </div>
-      )}
-      <button
-        className="role-button"
-        onPointerDown={() => setHeld(true)}
-        onPointerUp={() => setHeld(false)}
-        onPointerLeave={() => setHeld(false)}
-        onPointerCancel={() => setHeld(false)}
-        onContextMenu={(e) => e.preventDefault()}
-      >
-        {held ? "Loslassen zum Verbergen" : "Rolle ansehen (gedrückt halten)"}
-      </button>
-    </>
   );
 }

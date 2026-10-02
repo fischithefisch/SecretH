@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 import { POWER_LABEL } from "../game/rules";
 import type { PlayerView } from "../game/view";
 import { IMG, membershipImg, policyImg } from "./assets";
@@ -26,21 +26,21 @@ export function describeStatus(v: PlayerView): { text: string; mine: boolean } {
     }
     case "nominate":
       return isPres
-        ? { text: "Du bist Präsidentschaftskandidat. Nominiere einen Kanzler.", mine: true }
+        ? { text: "Du bist Präsident: Nominiere einen Kanzler.", mine: true }
         : { text: `${P} nominiert einen Kanzler.`, mine: false };
     case "vote": {
       const waiting = v.players.filter((p) => p.alive && !p.hasVoted).length;
       const mine = me.alive && v.myVote === null;
-      return { text: `Wahl: ${P} als Präsident, ${C} als Kanzler. Noch ${waiting} Stimme(n) offen.`, mine };
+      return { text: mine ? `Stimm ab: ${P} & ${C}?` : `Abstimmung läuft – noch ${waiting} offen.`, mine };
     }
     case "presidentDiscard":
       return isPres
-        ? { text: "Lege eines der drei Gesetze verdeckt ab.", mine: true }
-        : { text: `Präsident ${P} sieht sich drei Gesetze an. Nicht reden!`, mine: false };
+        ? { text: "Lege ein Gesetz verdeckt ab.", mine: true }
+        : { text: `${P} sieht sich drei Gesetze an. Nicht reden!`, mine: false };
     case "chancellorEnact":
       return isChan
         ? { text: "Erlasse eines der zwei Gesetze.", mine: true }
-        : { text: `Kanzler ${C} wählt ein Gesetz. Nicht reden!`, mine: false };
+        : { text: `${C} wählt ein Gesetz. Nicht reden!`, mine: false };
     case "vetoProposed":
       return isPres
         ? { text: `${C} möchte ein Veto einlegen. Stimmst du zu?`, mine: true }
@@ -49,8 +49,34 @@ export function describeStatus(v: PlayerView): { text: string; mine: boolean } {
       return isPres
         ? { text: `Präsidentenmacht: ${POWER_LABEL[phase.power]}.`, mine: true }
         : { text: `${P} nutzt die Präsidentenmacht: ${POWER_LABEL[phase.power]}.`, mine: false };
+    case "gameOver":
+      return { text: "Spiel vorbei!", mine: false };
     default:
       return { text: "", mine: false };
+  }
+}
+
+/** Whether ActionPanel has anything to show for this player right now. */
+export function hasActionPanel(v: PlayerView): boolean {
+  const me = v.you;
+  if (!me) return false;
+  const isPres = me.id === v.presidentId;
+  const isChan = me.id === v.chancellorId;
+  switch (v.phase.kind) {
+    case "roleReveal":
+      return true;
+    case "nominate":
+    case "presidentDiscard":
+    case "power":
+      return isPres;
+    case "vote":
+      return me.alive;
+    case "chancellorEnact":
+      return isChan;
+    case "vetoProposed":
+      return isPres || isChan;
+    default:
+      return false;
   }
 }
 
@@ -82,11 +108,10 @@ export function ActionPanel({ view, room }: { view: PlayerView; room: RoomState 
         <section className="panel action">
           <PlayerPicker
             view={v}
-            eligible={phase.eligibleIds}
             confirmLabel={(name) => `${name} als Kanzler nominieren`}
             onConfirm={(id) => room.act({ type: "nominate", targetId: id })}
           />
-          <p className="muted small">Gesperrt sind die zuletzt gewählte Regierung und Tote.</p>
+          <p className="muted small center">Ausgegraut: zuletzt gewählte Regierung (gesperrt).</p>
         </section>
       );
 
@@ -94,8 +119,8 @@ export function ActionPanel({ view, room }: { view: PlayerView; room: RoomState 
       if (!me.alive) return null;
       return (
         <section className="panel action">
-          <p className="center">
-            <b>{nameOf(v, v.presidentId)}</b> als Präsident und <b>{nameOf(v, v.chancellorId)}</b> als Kanzler?
+          <p className="center small">
+            <b>{nameOf(v, v.presidentId)}</b> (Präsident) &amp; <b>{nameOf(v, v.chancellorId)}</b> (Kanzler)
           </p>
           <div className="vote-cards">
             {[true, false].map((ja) => (
@@ -109,9 +134,7 @@ export function ActionPanel({ view, room }: { view: PlayerView; room: RoomState 
               </button>
             ))}
           </div>
-          {v.myVote !== null && (
-            <p className="muted center small">Du kannst deine Stimme ändern, bis alle abgestimmt haben.</p>
-          )}
+          {v.myVote !== null && <p className="muted center small">Ändern geht, bis alle abgestimmt haben.</p>}
         </section>
       );
 
@@ -189,7 +212,6 @@ export function ActionPanel({ view, room }: { view: PlayerView; room: RoomState 
 function PowerPanel({ view: v, room }: { view: PlayerView; room: RoomState }) {
   const phase = v.phase;
   if (phase.kind !== "power") return null;
-  const others = v.players.filter((p) => p.alive && p.id !== v.you!.id);
 
   switch (phase.power) {
     case "peek":
@@ -234,7 +256,6 @@ function PowerPanel({ view: v, room }: { view: PlayerView; room: RoomState }) {
         <section className="panel action">
           <PlayerPicker
             view={v}
-            eligible={others.filter((p) => !p.investigated).map((p) => p.id)}
             confirmLabel={(name) => `${name} untersuchen`}
             onConfirm={(id) => room.act({ type: "investigate", targetId: id })}
           />
@@ -246,7 +267,6 @@ function PowerPanel({ view: v, room }: { view: PlayerView; room: RoomState }) {
         <section className="panel action">
           <PlayerPicker
             view={v}
-            eligible={others.map((p) => p.id)}
             confirmLabel={(name) => `${name} wird nächster Präsidentschaftskandidat`}
             onConfirm={(id) => room.act({ type: "specialElection", targetId: id })}
           />
@@ -258,7 +278,6 @@ function PowerPanel({ view: v, room }: { view: PlayerView; room: RoomState }) {
         <section className="panel action">
           <PlayerPicker
             view={v}
-            eligible={others.map((p) => p.id)}
             confirmLabel={(name) => `${name} hinrichten`}
             danger
             onConfirm={(id) => room.act({ type: "execute", targetId: id })}
@@ -270,40 +289,45 @@ function PowerPanel({ view: v, room }: { view: PlayerView; room: RoomState }) {
 
 function PlayerPicker(props: {
   view: PlayerView;
-  eligible: string[];
   confirmLabel: (name: string) => string;
   onConfirm: (id: string) => void;
   danger?: boolean;
 }) {
-  const [selected, setSelected] = useState<string | null>(null);
-  const players = props.view.players.filter((p) => p.alive && p.id !== props.view.you!.id);
+  const { picked } = useContext(PickContext);
+  const eligible = pickTargets(props.view) ?? [];
+  const players = props.view.players.filter((p) => eligible.includes(p.id));
+  const chosen = players.find((p) => p.id === picked);
   return (
     <div className="picker">
-      <div className="picker-grid">
-        {players.map((p) => {
-          const ok = props.eligible.includes(p.id);
-          return (
-            <button
-              key={p.id}
-              className={`btn pick ${selected === p.id ? "selected" : ""}`}
-              disabled={!ok}
-              onClick={() => setSelected(p.id)}
-            >
-              {p.name}
-            </button>
-          );
-        })}
-      </div>
+      {!chosen && <p className="center muted small">Tippe am Tisch auf einen der hellen Plätze.</p>}
       <button
         className={`btn big ${props.danger ? "danger" : "primary"}`}
-        disabled={!selected}
-        onClick={() => selected && props.onConfirm(selected)}
+        disabled={!chosen}
+        onClick={() => chosen && props.onConfirm(chosen.id)}
       >
-        {selected ? props.confirmLabel(players.find((p) => p.id === selected)!.name) : "Spieler auswählen"}
+        {chosen ? props.confirmLabel(chosen.name) : "Spieler auswählen"}
       </button>
     </div>
   );
 }
+
+/** Players the viewer may pick right now (nomination or a presidential power), or null. */
+export function pickTargets(v: PlayerView): string[] | null {
+  const me = v.you;
+  if (!me || me.id !== v.presidentId) return null;
+  const others = v.players.filter((p) => p.alive && p.id !== me.id);
+  const phase = v.phase;
+  if (phase.kind === "nominate") return phase.eligibleIds;
+  if (phase.kind !== "power") return null;
+  if (phase.power === "investigate") return v.investigation ? null : others.filter((p) => !p.investigated).map((p) => p.id);
+  if (phase.power === "specialElection" || phase.power === "execute") return others.map((p) => p.id);
+  return null;
+}
+
+export const PickContext = createContext<{ picked: string | null; setPicked: (id: string | null) => void }>({
+  picked: null,
+  setPicked: () => {},
+});
 
 function CardPicker(props: {
   cards: ("L" | "F")[];
