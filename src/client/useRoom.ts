@@ -1,6 +1,6 @@
 import { PartySocket } from "partysocket";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientAction, ClientMessage, ServerMessage } from "../game/protocol";
+import type { ClientAction, ClientMessage, SeatClaim, ServerMessage } from "../game/protocol";
 import type { PlayerView } from "../game/view";
 
 const tokenKey = (room: string) => `sh:token:${room}`;
@@ -31,7 +31,14 @@ export interface RoomState {
   /** Server asked for a name (we have no valid seat in this room). */
   needName: { gameRunning: boolean } | null;
   error: { message: string; at: number } | null;
+  /** Seat requests from other devices (only sent to players in the game). */
+  claims: SeatClaim[];
+  /** Seat this device asked to take over, waiting for approval. */
+  pendingClaim: string | null;
   join: (name: string) => void;
+  claimSeat: (playerId: string) => void;
+  resolveClaim: (claimId: string, allow: boolean) => void;
+  replaceWithBot: (playerId: string) => void;
   act: (action: ClientAction) => void;
   addBots: () => void;
   forgetSeat: () => void;
@@ -47,6 +54,8 @@ export function useRoom(room: string): RoomState {
   const [view, setView] = useState<PlayerView | null>(null);
   const [needName, setNeedName] = useState<RoomState["needName"]>(null);
   const [error, setError] = useState<RoomState["error"]>(null);
+  const [claims, setClaims] = useState<SeatClaim[]>([]);
+  const [pendingClaim, setPendingClaim] = useState<string | null>(null);
   const socketRef = useRef<PartySocket | null>(null);
   const pendingName = useRef<string | null>(null);
   const lastPong = useRef(Date.now());
@@ -84,6 +93,7 @@ export function useRoom(room: string): RoomState {
           storageSet(tokenKey(room), msg.token);
           pendingName.current = null;
           setNeedName(null);
+          setPendingClaim(null);
           break;
         case "needName":
           storageSet(tokenKey(room), null);
@@ -91,6 +101,14 @@ export function useRoom(room: string): RoomState {
           break;
         case "state":
           setView(msg.view);
+          setClaims(msg.claims);
+          break;
+        case "claimPending":
+          setPendingClaim(msg.playerId);
+          break;
+        case "claimDenied":
+          setPendingClaim(null);
+          setError({ message: "Die Anfrage wurde abgelehnt.", at: Date.now() });
           break;
         case "error":
           pendingName.current = null;
@@ -150,10 +168,30 @@ export function useRoom(room: string): RoomState {
   const act = useCallback((action: ClientAction) => sendRaw({ t: "action", action }), [sendRaw]);
 
   const addBots = useCallback(() => sendRaw({ t: "addBots" }), [sendRaw]);
+  const claimSeat = useCallback((playerId: string) => sendRaw({ t: "claimSeat", playerId }), [sendRaw]);
+  const resolveClaim = useCallback(
+    (claimId: string, allow: boolean) => sendRaw({ t: "resolveClaim", claimId, allow }),
+    [sendRaw],
+  );
+  const replaceWithBot = useCallback((playerId: string) => sendRaw({ t: "replaceWithBot", playerId }), [sendRaw]);
 
   const forgetSeat = useCallback(() => storageSet(tokenKey(room), null), [room]);
 
-  return { status, view, needName, error, join, act, addBots, forgetSeat };
+  return {
+    status,
+    view,
+    needName,
+    error,
+    claims,
+    pendingClaim,
+    join,
+    claimSeat,
+    resolveClaim,
+    replaceWithBot,
+    act,
+    addBots,
+    forgetSeat,
+  };
 }
 
 /** Keeps the screen on during a game (iOS 16.4+, home-screen apps since 18.4). */

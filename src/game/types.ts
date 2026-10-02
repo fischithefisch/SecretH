@@ -109,7 +109,9 @@ export type Action =
   | { type: "specialElection"; by: string; targetId: string }
   | { type: "execute"; by: string; targetId: string }
   | { type: "ackPower"; by: string }
-  | { type: "backToLobby"; by: string };
+  | { type: "backToLobby"; by: string }
+  /** Server-only: hand a seat to a bot (player gone) or back to a human. */
+  | { type: "setBot"; by: string; targetId: string; bot: boolean };
 
 export type ActionResult = { ok: true; state: GameState } | { ok: false; error: string };
 

@@ -35,13 +35,27 @@ export const clientMessageSchema = z.discriminatedUnion("t", [
   z.object({ t: z.literal("ping") }),
   /** Host only, lobby only: fill the room with server-controlled test players. */
   z.object({ t: z.literal("addBots") }),
+  /** During a game: ask to take over an offline (or bot) seat on this device. */
+  z.object({ t: z.literal("claimSeat"), playerId: id }),
+  /** Host (or anyone, if the host's seat is claimed) answers a seat request. */
+  z.object({ t: z.literal("resolveClaim"), claimId: id, allow: z.boolean() }),
+  /** Let a bot play for an offline player. */
+  z.object({ t: z.literal("replaceWithBot"), playerId: id }),
 ]);
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
+
+/** A device asking to take over a seat during a running game. */
+export interface SeatClaim {
+  id: string;
+  playerId: string;
+}
 
 export type ServerMessage =
   | { t: "welcome"; playerId: string; token: string }
   /** No (valid) token and no name given: the client should ask for a name. */
   | { t: "needName"; gameRunning: boolean }
-  | { t: "state"; view: PlayerView }
+  | { t: "state"; view: PlayerView; claims: SeatClaim[] }
+  | { t: "claimPending"; playerId: string }
+  | { t: "claimDenied" }
   | { t: "error"; message: string }
   | { t: "pong" };

@@ -1,7 +1,7 @@
 import { routePartykitRequest, Server, type Connection } from "partyserver";
 import { BOT_NAMES, botAction } from "../game/bots";
 import { applyAction, createGame } from "../game/engine";
-import { clientMessageSchema, type ServerMessage } from "../game/protocol";
+import { clientMessageSchema, type SeatClaim, type ServerMessage } from "../game/protocol";
 import { MAX_PLAYERS, MIN_PLAYERS } from "../game/rules";
 import type { GameState, Rng } from "../game/types";
 import { viewFor } from "../game/view";
@@ -38,6 +38,8 @@ export class GameRoom extends Server<Env> {
 
   private data: Stored = { game: createGame(), tokens: {} };
   private botTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Open seat requests: claim id -> requesting connection + seat. Kept in memory only. */
+  private claims = new Map<string, { connId: string; playerId: string }>();
 
   async onStart() {
     const stored = await this.ctx.storage.get<Stored>("data");
@@ -84,13 +86,48 @@ export class GameRoom extends Server<Env> {
     return id && this.data.game.players.some((p) => p.id === id) ? id : null;
   }
 
+  private connectedPlayerIds(excludeConnId?: string): Set<string> {
+    const ids = [...this.getConnections<ConnState>()]
+      .filter((c) => c.id !== excludeConnId)
+      .map((c) => this.playerIdOf(c));
+    return new Set(ids.filter((id): id is string => !!id));
+  }
+
   /** Sends every connection its own filtered view of the game. */
   private broadcastState(excludeId?: string) {
     const conns = [...this.getConnections<ConnState>()].filter((c) => c.id !== excludeId);
-    const connected = new Set(conns.map((c) => this.playerIdOf(c)).filter((id): id is string => !!id));
+    const connected = this.connectedPlayerIds(excludeId);
+    // Drop requests whose device went away.
+    for (const [id, claim] of this.claims) if (!conns.some((c) => c.id === claim.connId)) this.claims.delete(id);
+    const claims: SeatClaim[] = [...this.claims].map(([id, c]) => ({ id, playerId: c.playerId }));
     for (const conn of conns) {
-      this.send(conn, { t: "state", view: viewFor(this.data.game, this.playerIdOf(conn), connected) });
+      const playerId = this.playerIdOf(conn);
+      this.send(conn, {
+        t: "state",
+        view: viewFor(this.data.game, playerId, connected),
+        claims: playerId ? claims : [],
+      });
     }
+  }
+
+  /** A seat can be taken over during a game if nobody plays it right now. */
+  private isClaimable(playerId: string): boolean {
+    const p = this.data.game.players.find((x) => x.id === playerId);
+    return !!p && this.data.game.phase.kind !== "lobby" && (p.bot || !this.connectedPlayerIds().has(p.id));
+  }
+
+  /** The host decides, unless it's the host's own seat (then any present player). */
+  private mayDecideFor(approverId: string | null, seatId: string): boolean {
+    if (!approverId) return false;
+    const host = this.data.game.hostId;
+    return approverId === host || (seatId === host && !this.connectedPlayerIds().has(host));
+  }
+
+  private async commit(game: GameState, tokens = this.data.tokens) {
+    this.data = { game, tokens };
+    await this.save();
+    this.broadcastState();
+    this.scheduleBots();
   }
 
   onConnect(conn: Connection<ConnState>) {
@@ -135,6 +172,68 @@ export class GameRoom extends Server<Env> {
       return this.broadcastState();
     }
 
+    if (msg.t === "claimSeat") {
+      if (this.playerIdOf(conn)) return;
+      if (!this.isClaimable(msg.playerId)) {
+        return this.send(conn, { t: "error", message: "Dieser Platz ist gerade nicht frei." });
+      }
+      for (const [id, c] of this.claims) if (c.connId === conn.id) this.claims.delete(id);
+      this.claims.set(randomHex(6), { connId: conn.id, playerId: msg.playerId });
+      this.send(conn, { t: "claimPending", playerId: msg.playerId });
+      return this.broadcastState();
+    }
+
+    if (msg.t === "resolveClaim") {
+      const claim = this.claims.get(msg.claimId);
+      if (!claim) return;
+      if (!this.mayDecideFor(this.playerIdOf(conn), claim.playerId)) {
+        return this.send(conn, { t: "error", message: "Nur der Host kann das entscheiden." });
+      }
+      this.claims.delete(msg.claimId);
+      const claimant = this.getConnection<ConnState>(claim.connId);
+      if (!claimant) return this.broadcastState();
+      if (!msg.allow || !this.isClaimable(claim.playerId)) {
+        this.send(claimant, { t: "claimDenied" });
+        return this.broadcastState();
+      }
+      // Other requests for the same seat are refused.
+      for (const [id, c] of this.claims) {
+        if (c.playerId !== claim.playerId) continue;
+        this.claims.delete(id);
+        const other = this.getConnection(c.connId);
+        if (other) this.send(other, { t: "claimDenied" });
+      }
+      let game = this.data.game;
+      const seat = game.players.find((p) => p.id === claim.playerId)!;
+      if (seat.bot) {
+        const result = applyAction(
+          game,
+          { type: "setBot", by: this.playerIdOf(conn)!, targetId: seat.id, bot: false },
+          secureRng,
+        );
+        if (result.ok) game = result.state;
+      }
+      // The old device loses its token; the new one gets a fresh one.
+      const token = randomHex(24);
+      const tokens = Object.fromEntries(Object.entries(this.data.tokens).filter(([, id]) => id !== seat.id));
+      tokens[token] = seat.id;
+      claimant.setState({ playerId: seat.id });
+      this.send(claimant, { t: "welcome", playerId: seat.id, token });
+      return this.commit(game, tokens);
+    }
+
+    if (msg.t === "replaceWithBot") {
+      const game = this.data.game;
+      const target = game.players.find((p) => p.id === msg.playerId);
+      const by = this.playerIdOf(conn);
+      if (!target || target.bot || this.connectedPlayerIds().has(target.id) || !this.mayDecideFor(by, target.id)) {
+        return this.send(conn, { t: "error", message: "Das geht nur für Spieler, die offline sind." });
+      }
+      const result = applyAction(game, { type: "setBot", by: by!, targetId: target.id, bot: true }, secureRng);
+      if (!result.ok) return this.send(conn, { t: "error", message: result.error });
+      return this.commit(result.state);
+    }
+
     if (msg.t === "hello") {
       const known = msg.token ? this.data.tokens[msg.token] : undefined;
       if (known && this.data.game.players.some((p) => p.id === known)) {
@@ -165,10 +264,7 @@ export class GameRoom extends Server<Env> {
     // Players who left or were kicked lose their rejoin token.
     const remaining = new Set(result.state.players.map((p) => p.id));
     const tokens = Object.fromEntries(Object.entries(this.data.tokens).filter(([, id]) => remaining.has(id)));
-    this.data = { game: result.state, tokens };
-    await this.save();
-    this.broadcastState();
-    this.scheduleBots();
+    await this.commit(result.state, tokens);
   }
 }
 

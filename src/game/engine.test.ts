@@ -426,3 +426,15 @@ describe("bots", () => {
     expect(botAction(s, seededRng(1))).toMatchObject({ type: "vote", by: "p1" });
   });
 });
+
+describe("seat handover", () => {
+  it("lets a bot take over a seat and hands the host role on", () => {
+    let s = started(5, { roles: LIB5 });
+    s = act(s, { type: "setBot", by: "p1", targetId: "p0", bot: true }); // host's own seat
+    expect(s.players[0].bot).toBe(true);
+    expect(s.hostId).toBe("p1");
+    expect(rejects(s, { type: "setBot", by: "p2", targetId: "p3", bot: true })).toMatch(/Host/);
+    s = act(s, { type: "setBot", by: "p1", targetId: "p0", bot: false });
+    expect(s.players[0].bot).toBe(false);
+  });
+});

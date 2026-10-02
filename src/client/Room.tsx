@@ -8,6 +8,7 @@ import { GameOver } from "./GameOver";
 import { navigate } from "./nav";
 import { Events } from "./Events";
 import { RoleButton } from "./RoleReveal";
+import { SeatNotices, SeatPicker } from "./Seats";
 import { NAME_KEY, storageGet, useRoom, useWakeLock, type RoomState } from "./useRoom";
 
 export function Room({ code }: { code: string }) {
@@ -18,15 +19,25 @@ export function Room({ code }: { code: string }) {
 
   let content;
   if (needName) {
-    content = needName.gameRunning ? <GameRunning /> : <JoinForm room={room} code={code} />;
+    content = needName.gameRunning ? <SeatPicker room={room} /> : <JoinForm room={room} code={code} />;
   } else if (!view || !view.you) {
     content = <p className="center muted">Verbinde …</p>;
   } else if (view.phase.kind === "lobby") {
     content = <Lobby view={view} room={room} code={code} />;
   } else if (view.phase.kind === "gameOver") {
-    content = <GameOver view={view} room={room} />;
+    content = (
+      <>
+        <SeatNotices view={view} room={room} />
+        <GameOver view={view} room={room} />
+      </>
+    );
   } else {
-    content = <Game view={view} room={room} />;
+    content = (
+      <>
+        <SeatNotices view={view} room={room} />
+        <Game view={view} room={room} />
+      </>
+    );
   }
 
   return (
@@ -58,18 +69,6 @@ function ErrorToast({ error }: { error: RoomState["error"] }) {
   return (
     <div className="toast" role="alert" onClick={() => setVisible(false)}>
       {error.message}
-    </div>
-  );
-}
-
-function GameRunning() {
-  return (
-    <div className="panel center">
-      <h2>Spiel läuft bereits</h2>
-      <p className="muted">In diesem Raum wird gerade gespielt. Neue Spieler können erst in der nächsten Runde beitreten.</p>
-      <button className="btn" onClick={() => navigate("/")}>
-        Zur Startseite
-      </button>
     </div>
   );
 }

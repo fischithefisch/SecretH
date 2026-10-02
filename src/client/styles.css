@@ -640,3 +640,15 @@ label {
 .reveal-grid .dead {
   opacity: 0.6;
 }
+
+/* ---------- seat notices ---------- */
+
+.notice {
+  border: 2px solid var(--muted);
+}
+.notice p {
+  margin: 0 0 10px;
+}
+.notice.request {
+  border-color: var(--gold);
+}

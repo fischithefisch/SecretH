@@ -443,6 +443,18 @@ function handle(s: GameState, a: Action, rng: Rng) {
       return startRound(s);
     }
 
+    case "setBot": {
+      if (s.phase.kind === "lobby") fail("Das geht nur während des Spiels.");
+      const target = player(s, a.targetId);
+      if (a.by !== s.hostId && a.targetId !== s.hostId) fail("Nur der Host kann das tun.");
+      target.bot = a.bot;
+      if (a.bot && s.hostId === target.id) {
+        s.hostId = s.players.find((p) => !p.bot)?.id ?? s.hostId;
+      }
+      log(s, a.bot ? `Ein Bot übernimmt den Platz von ${target.name}.` : `${target.name} spielt wieder selbst.`);
+      return;
+    }
+
     case "backToLobby": {
       requirePhase(s, "gameOver");
       if (a.by !== s.hostId) fail("Nur der Host kann eine neue Runde starten.");
