@@ -13,6 +13,16 @@ seinem eigenen iPhone (oder Android) im Browser, keine App-Installation nötig. 
 Tipp: In Safari **Teilen → Zum Home-Bildschirm** – dann läuft das Spiel im Vollbild und der Bildschirm bleibt an.
 Wird ein Handy gesperrt oder die Seite neu geladen, kommt man automatisch auf seinen Platz zurück.
 
+**Was die App kann**
+
+- Holztisch mit allen Spielern im Oval, Präsident-/Kanzler-Schild wandert mit, Stimmkarten vor den Sitzen
+- Animationen: Austeilen, Karten ziehen/weitergeben/ablegen, Gesetz aufdecken und aufs Brett stempeln,
+  Chaos, Hinrichtung, Rollen-Aufdecken am Spielende – dazu abschaltbare Sounds (im Browser erzeugt, 0 KB)
+- Nominieren und Präsidentenmächte durch Antippen der Person am Tisch
+- **Testmodus:** In der Lobby „Mit Bots auffüllen“ – Bots spielen automatisch mit (auch allein testbar)
+- **Platz übernehmen:** Neues Handy? Den eigenen Platz anfragen, der Host bestätigt
+- **Offline-Spieler:** Der Host kann den Platz an einen Bot geben, damit das Spiel weiterläuft
+
 ## Technik
 
 | Teil | Was | Wo |
@@ -48,7 +58,7 @@ Räume ohne Verbindung werden nach 3 Tagen automatisch gelöscht.
 
 ## Datenverbrauch
 
-Erster Start ca. 0,3–0,5 MB (App + Grafiken), danach aus dem Cache. Ein Spiel selbst überträgt nur wenige
+Erster Start ca. 0,4–0,6 MB (App + Grafiken), danach aus dem Cache. Ein Spiel selbst überträgt nur wenige
 hundert KB pro Person – weniger als eine Minute Telefonat.
 
 ## Lizenz & Credits

@@ -5,6 +5,7 @@ import type { PlayerView } from "../game/view";
 import { GameTable } from "./GameTable";
 import { navigate } from "./nav";
 import { SeatNotices, SeatPicker } from "./Seats";
+import { onSoundChange, setSoundEnabled, soundEnabled } from "./sound";
 import { NAME_KEY, storageGet, useRoom, useWakeLock, type RoomState } from "./useRoom";
 
 export function Room({ code }: { code: string }) {
@@ -36,8 +37,11 @@ export function Room({ code }: { code: string }) {
           ←
         </button>
         <span className="room-code">Raum {code}</span>
-        <span className={`conn conn-${status}`}>
-          {status === "open" ? "online" : status === "connecting" ? "verbinde …" : "verbinde neu …"}
+        <span className="row">
+          <SoundToggle />
+          <span className={`conn conn-${status}`}>
+            {status === "open" ? "online" : status === "connecting" ? "verbinde …" : "verbinde neu …"}
+          </span>
         </span>
       </header>
       <ErrorToast error={room.error} />
@@ -182,5 +186,25 @@ function Lobby({ view, room, code }: { view: PlayerView; room: RoomState; code: 
         </button>
       </section>
     </div>
+  );
+}
+
+function SoundToggle() {
+  const [on, setOn] = useState(soundEnabled);
+  useEffect(() => {
+    const off = onSoundChange(setOn);
+    return () => {
+      off();
+    };
+  }, []);
+  return (
+    <button
+      className="btn link sound-toggle"
+      onClick={() => setSoundEnabled(!on)}
+      aria-label={on ? "Ton aus" : "Ton an"}
+      title={on ? "Ton aus" : "Ton an"}
+    >
+      {on ? "🔊" : "🔇"}
+    </button>
   );
 }

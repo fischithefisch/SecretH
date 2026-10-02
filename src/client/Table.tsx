@@ -118,7 +118,7 @@ export function Table(props: {
       {positions.length > 0 &&
         seats.map((p, i) => {
           const { x, y } = positions[i];
-          const vote = votes?.votes[p.id];
+          const vote = over ? undefined : votes?.votes[p.id];
           const canPick = !!selectable?.includes(p.id);
           const role = over ? view.knownRoles[p.id] : undefined;
           return (
